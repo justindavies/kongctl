@@ -2,6 +2,7 @@ package mesh
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/kong/kongctl/internal/cmd"
 	meshcommon "github.com/kong/kongctl/internal/cmd/root/products/konnect/mesh/common"
@@ -90,6 +91,11 @@ func NewMeshCmd(
 		baseCmd.Flags().StringSliceP(FilenameFlagName, "f", nil,
 			"Files, directories, URLs, or - for stdin, holding the mesh resources to apply. Repeatable.")
 	}
+	if verb == verbs.Dump {
+		baseCmd.Flags().String(meshcommon.ExportProfileFlagName, ProfileFederation,
+			fmt.Sprintf(`Which resource types to export. One of: %s.
+- Config path: [ %s ]`, strings.Join(Profiles, ", "), meshcommon.ExportProfileConfigPath))
+	}
 
 	// Resource types come from the control plane at runtime, so they cannot be
 	// registered as subcommands without a network call at startup. Arbitrary
@@ -104,6 +110,13 @@ func NewMeshCmd(
 		helper := cmd.BuildHelper(cmdObj, args)
 		if _, err := helper.GetOutputFormat(); err != nil {
 			return err
+		}
+		if verb == verbs.Dump {
+			profile, err := resolveExportProfile(helper, cmdObj)
+			if err != nil {
+				return err
+			}
+			return runDumpResources(helper, profile)
 		}
 		if appliesResources(verb) {
 			// Resources come from -f, so a positional argument here is either
@@ -146,7 +159,7 @@ func NewMeshCmd(
 		}
 		return cmd.RequireSubcommand(cmdObj, args)
 	}
-	if !appliesResources(verb) && verb != verbs.Delete {
+	if !appliesResources(verb) && verb != verbs.Delete && verb != verbs.Dump {
 		cmd.MarkRequiresSubcommand(baseCmd)
 	}
 
@@ -160,4 +173,27 @@ func NewMeshCmd(
 	}
 
 	return baseCmd, nil
+}
+
+// resolveExportProfile returns which types an export covers, reading the
+// effective value through configuration so that a persistent default in a
+// profile or environment variable is honoured, with the flag winning.
+func resolveExportProfile(helper cmd.Helper, cmdObj *cobra.Command) (string, error) {
+	cfg, err := helper.GetConfig()
+	if err != nil {
+		return "", err
+	}
+
+	if err := cfg.BindFlag(meshcommon.ExportProfileConfigPath,
+		cmdObj.Flags().Lookup(meshcommon.ExportProfileFlagName)); err != nil {
+		return "", err
+	}
+
+	profile := strings.TrimSpace(cfg.GetString(meshcommon.ExportProfileConfigPath))
+	if profile == "" {
+		// Configuration can supply this value, so an empty result is checked
+		// here rather than left to the flag's own default.
+		profile = ProfileFederation
+	}
+	return profile, nil
 }
