@@ -97,10 +97,10 @@ func TestRequireValidFor(t *testing.T) {
 	}
 }
 
-// The configurable token options must resolve with the flag winning over an
-// environment variable, which wins over the configuration file. The control
-// plane selection flags already behaved this way; these did not exist as
-// configuration at all.
+// The configurable token and inspection options must resolve with the flag
+// winning over an environment variable, which wins over the configuration
+// file. The control plane selection flags already behaved this way; these did
+// not exist as configuration at all.
 func TestMeshOptionPrecedence(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -125,6 +125,21 @@ func TestMeshOptionPrecedence(t *testing.T) {
 			fileValue:  "1h0m0s",
 			flagValue:  "5m0s",
 			want:       "5m0s",
+		},
+		{
+			name:       "inspection type from the file",
+			configPath: meshcommon.InspectTypeConfigPath,
+			flagName:   meshcommon.InspectTypeFlagName,
+			fileValue:  InspectStats,
+			want:       InspectStats,
+		},
+		{
+			name:       "the flag wins for the inspection type",
+			configPath: meshcommon.InspectTypeConfigPath,
+			flagName:   meshcommon.InspectTypeFlagName,
+			fileValue:  InspectStats,
+			flagValue:  InspectClusters,
+			want:       InspectClusters,
 		},
 	}
 
